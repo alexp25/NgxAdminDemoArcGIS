@@ -54,7 +54,7 @@
     "classlist.js": "1.1.20150312",
     "core-js": "2.5.1",
     "echarts": "^4.0.2",
-    "esri-loader": "^2.15.0",
+    "esri-loader": "^3.3.0",
     "eva-icons": "^1.1.3",
     "firebase": "^8.10.0",
     "intl": "1.2.5",
