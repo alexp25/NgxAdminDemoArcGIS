@@ -21,6 +21,10 @@ export class ArcGISMapComponent implements OnInit, OnDestroy {
     _FeatureLayer;
     _Graphic;
     _GraphicsLayer;
+    _Route;
+    _RouteParameters;
+    _FeatureSet;
+    _Point;
 
     map: __esri.Map;
     pointGraphic: __esri.Graphic;
@@ -76,19 +80,30 @@ export class ArcGISMapComponent implements OnInit, OnDestroy {
             setDefaultOptions({ css: true });
 
             // Load the modules for the ArcGIS API for JavaScript
-            const [Map, MapView, FeatureLayer, Graphic, GraphicsLayer] = await loadModules([
+            const [esriConfig, Map, MapView, FeatureLayer, Graphic, Point, GraphicsLayer, route, RouteParameters, FeatureSet] = await loadModules([
+                "esri/config",
                 "esri/Map",
                 "esri/views/MapView",
                 "esri/layers/FeatureLayer",
                 "esri/Graphic",
-                "esri/layers/GraphicsLayer"
+                "esri/geometry/Point",
+                "esri/layers/GraphicsLayer",
+                "esri/rest/route",
+                "esri/rest/support/RouteParameters",
+                "esri/rest/support/FeatureSet"
             ]);
+
+            // esriConfig.apiKey = "MY_API_KEY";
 
             this._Map = Map;
             this._MapView = MapView;
             this._FeatureLayer = FeatureLayer;
             this._Graphic = Graphic;
             this._GraphicsLayer = GraphicsLayer;
+            this._Route = route;
+            this._RouteParameters = RouteParameters;
+            this._FeatureSet = FeatureSet;
+            this._Point = Point;
 
             // Configure the Map
             const mapProperties = {
@@ -119,10 +134,90 @@ export class ArcGISMapComponent implements OnInit, OnDestroy {
 
             await this.view.when(); // wait for map to load
             console.log("ArcGIS map loaded");
+
+            // this.addRouter();
+
             return this.view;
         } catch (error) {
             console.error("EsriLoader: ", error);
             throw error;
+        }
+    }
+
+    addRouter() {
+        const routeUrl = "https://route-api.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World";
+       
+        this.view.on("click", (event) => {
+            console.log("point clicked: ", event.mapPoint.latitude, event.mapPoint.longitude);
+            if (this.view.graphics.length === 0) {
+                addGraphic("origin", event.mapPoint);
+            } else if (this.view.graphics.length === 1) {
+                addGraphic("destination", event.mapPoint);
+                getRoute(); // Call the route service
+            } else {
+                this.view.graphics.removeAll();
+                addGraphic("origin", event.mapPoint);
+            }
+        });
+
+        var addGraphic = (type: any, point: any) => {
+            const graphic = new this._Graphic({
+                symbol: {
+                    type: "simple-marker",
+                    color: (type === "origin") ? "white" : "black",
+                    size: "8px"
+                } as any,
+                geometry: point
+            });
+            this.view.graphics.add(graphic);
+        }
+
+        var getRoute = () => {
+            const routeParams = new this._RouteParameters({
+                stops: new this._FeatureSet({
+                    features: this.view.graphics.toArray()
+                }),
+                returnDirections: true
+            });
+
+            this._Route.solve(routeUrl, routeParams).then((data: any) => {
+                for (let result of data.routeResults) {
+                    result.route.symbol = {
+                        type: "simple-line",
+                        color: [5, 150, 255],
+                        width: 3
+                    };
+                    this.view.graphics.add(result.route);
+                }
+
+                // Display directions
+                if (data.routeResults.length > 0) {
+                    const directions: any = document.createElement("ol");
+                    directions.classList = "esri-widget esri-widget--panel esri-directions__scroller";
+                    directions.style.marginTop = "0";
+                    directions.style.padding = "15px 15px 15px 30px";
+                    const features = data.routeResults[0].directions.features;
+
+                    let sum = 0;
+                    // Show each direction
+                    features.forEach((result: any, i: any) => {
+                        sum += parseFloat(result.attributes.length);
+                        const direction = document.createElement("li");
+                        direction.innerHTML = result.attributes.text + " (" + result.attributes.length + " miles)";
+                        directions.appendChild(direction);
+                    });
+
+                    sum = sum * 1.609344;
+                    console.log('dist (km) = ', sum);
+
+                    this.view.ui.empty("top-right");
+                    this.view.ui.add(directions, "top-right");
+
+                }
+               
+            }).catch((error: any) => {
+                console.log(error);
+            });
         }
     }
 
